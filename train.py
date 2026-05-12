@@ -13,12 +13,9 @@ from torch_geometric.loader import DataLoader
 import math
 import gc
 from utils.early_stopping import EarlyStopping
-from utils.gradient_clipping import GradientClipping
 from utils.auxil import *
-from GraphModels import GraphConvWat, ChebNet, GATResMeanConv, m_GCN, GCN2, GAT, GIN
 from utils.DataLoader import WDNDataset, get_stacked_set
-from ConfigModels import select_model, config_gatres_small, config_gatres_small_rwpe
-from typing import Callable, Optional
+from models.ConfigModels import select_model
  
 torch.cuda.empty_cache()
 gc.collect()
