@@ -12,9 +12,9 @@ from torch_geometric.loader import DataLoader
 
 import math
 import gc
+from utils.DataLoader import WDNDataset
 from utils.early_stopping import EarlyStopping
 from utils.auxil import *
-from utils.DataLoader import WDNDataset, get_stacked_set
 from models.ConfigModels import select_model
  
 torch.cuda.empty_cache()
