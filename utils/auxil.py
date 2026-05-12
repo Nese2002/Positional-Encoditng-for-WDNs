@@ -191,3 +191,30 @@ def nx_to_pyg(data: Any, graph: "nx.graph") -> "torch_geometric.data.Data":
     g_data.y = torch.Tensor(np.reshape(y, [-1, 1]))
     g_data.x = torch.Tensor(np.reshape(y, [-1, 1]))
     return g_data
+
+
+def print_multitest_metrics(
+    trials: int,
+    mean_test_loss: float,
+    std_test_loss: float,
+    out_test_metric_dict: dict,
+):
+    """support beautifying string format for multi-trial evaluation
+
+    Args:
+        trials (int): number of trials
+        mean_test_loss (float): mean of test losses
+        std_test_loss (float): std of test losses
+        out_test_metric_dict (dict): metric dict contains mean, std and raw measurment values in trials runs
+    """
+    metric_log = ""
+    for k, v in out_test_metric_dict.items():
+        if "mean" in k:
+            name = k[:-5]
+            std = out_test_metric_dict[f"{name}_std"]
+            metric_log += f"{name}: {v:.4f} +/- {std:.4f}, "
+    
+    print(f"\nThis TEST experiment reports the average result of {trials} runs.")
+    print(
+        f"test_loss: {mean_test_loss:.4f} +/- {std_test_loss:.4f}, {metric_log}"
+    )

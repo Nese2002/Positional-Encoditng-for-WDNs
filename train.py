@@ -14,7 +14,6 @@ import math
 import gc
 from utils.DataLoader import WDNDataset
 from utils.early_stopping import EarlyStopping
-from utils.auxil import *
 from models.ConfigModels import select_model
  
 torch.cuda.empty_cache()
@@ -250,7 +249,7 @@ def train(args, model, train_ds, val_ds, do_load):
  
     model = model.to(device)
  
- 
+    print("#" * 80)
     print("args list:")
     for k, v in vars(args).items():
         print(f"  {k} = {v}")
