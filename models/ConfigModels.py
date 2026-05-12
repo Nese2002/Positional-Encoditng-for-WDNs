@@ -1,6 +1,6 @@
 import argparse
 import torch
-from GATRes import GATResMeanConv
+from models.GATRes import GATResMeanConv
 
 
 # def _apply_common_args(args: argparse.Namespace) -> argparse.Namespace:
