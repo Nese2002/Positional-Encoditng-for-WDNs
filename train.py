@@ -39,7 +39,7 @@ _MODEL_PATH    = "/content/drive/MyDrive/WDN/checkpoints/ctown_gatres10k_12/best
 _RWPE_STEPS         = 0
 _DO_LOAD            = False
 _FEATURE             = "pressure"
-# _RANDOM_SEED = 42
+_RANDOM_SEED = 42
 
 
 
@@ -90,7 +90,7 @@ def get_arguments(raw_args):
     parser.add_argument("--rwpe_steps", default=_RWPE_STEPS, type=int, help="Number of Random Walk PE steps appended to node features. 0 = disabled.")
     parser.add_argument("--do_load", default=_DO_LOAD, action="store_true", help="Whether to load model weights from model_path")
     parser.add_argument("--feature", default=_FEATURE, choices=["pressure", "head"], type=str, help="feature input")
-    # parser.add_argument("--seed", default=_RANDOM_SEED, type=int, help="Random seed for reproducibility")
+    parser.add_argument("--seed", default=_RANDOM_SEED, type=int, help="Random seed for reproducibility")
 
 
     args = parser.parse_args(args=raw_args)
@@ -350,7 +350,7 @@ def train(args, model, train_ds, val_ds, do_load):
  
 if __name__ == "__main__":
     args = get_arguments(sys.argv[1:])
-    # set_seed(args.seed) 
+    set_seed(args.seed) 
     args, model = select_model(args, args.model_path != "")
     train_ds, val_ds = get_default_datasets(args)
     train(args=args, model=model, train_ds=train_ds, val_ds=val_ds, do_load=args.do_load)
