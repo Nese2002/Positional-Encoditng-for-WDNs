@@ -68,6 +68,7 @@ def get_arguments(raw_args):
     parser.add_argument("--feature", default=_FEATURE, choices=["pressure", "head"], type=str, help="feature input")
     parser.add_argument("--model_name", default=_MODEL_NAME, type=str, help="Name of model. Keep its empty to use the name of class by default")
     parser.add_argument("--batch_size", default=_BATCH_SIZE, type=int, help="batch size")
+    parser.add_argument("--rwpe_steps", default=_RWPE_STEPS, type=int, help="Number of Random Walk PE steps appended to node features. 0 = disabled.")
     parser.add_argument(
         "--device",
         default=_DEVICE,
@@ -90,6 +91,7 @@ def get_arguments(raw_args):
 
 
 def get_default_datasets(args: argparse.Namespace, mean_dmd=0.1, std_dmd=1.0) -> tuple[WDNDataset, WDNDataset]:
+    rwpe_steps = getattr(args, "rwpe_steps", 0)
     
     train_ds = WDNDataset(
         zip_file_paths=args.dataset_paths,
@@ -99,6 +101,7 @@ def get_default_datasets(args: argparse.Namespace, mean_dmd=0.1, std_dmd=1.0) ->
         mean=None,
         std=None,
         norm_type="znorm",
+        rwpe_steps=rwpe_steps,
     )
     
     test_ds = get_stacked_set2(
@@ -107,7 +110,7 @@ def get_default_datasets(args: argparse.Namespace, mean_dmd=0.1, std_dmd=1.0) ->
         feature=args.feature,
         train_mean=train_ds.mean,
         train_std=train_ds.std,
-        rwpe_steps=0,
+        rwpe_steps=rwpe_steps,
     )
     return train_ds, test_ds
 
@@ -145,8 +148,8 @@ def test_one_epoch(
 
             data_x1[all_mask] = 0
 
-            
-            out = model(data_x1, data.edge_index)
+            x_input = torch.cat([data_x1, data.pe.to(device)], dim=-1) if hasattr(data, "pe") else data_x1
+            out = model(x_input, data.edge_index)
 
             y_pred = out[all_mask]  # y_pred.masked_select(mask)
             y_true = data.y[all_mask]  # y_true.masked_select(mask)
@@ -319,5 +322,4 @@ if __name__ == "__main__":
     train_ds, test_ds = get_default_datasets(args)
 
     test(args=args, model=model, train_ds=train_ds, test_ds=test_ds, do_load=True)
-
 
