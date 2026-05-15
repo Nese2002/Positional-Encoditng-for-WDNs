@@ -28,13 +28,56 @@ def compute_rwpe(edge_index: torch.Tensor, num_nodes: int, k: int) -> torch.Tens
     return torch.stack(pe, dim=1)               # [N, k]
 
 
-def get_graph_template(new_graph: nx.Graph, rwpe_steps: int = 0) -> Data:
+def compute_lapev(edge_index: torch.Tensor, num_nodes: int, k: int) -> torch.Tensor:
+    """Compute the k smallest non-trivial eigenvectors of the symmetric
+    normalised Laplacian L_sym = I - D^{-1/2} A D^{-1/2}.
+
+    Uses dense eigendecomposition for graphs with <= 2000 nodes and the
+    sparse Lanczos solver (eigsh) for larger ones.  Trivial eigenvectors
+    (eigenvalue < 1e-5, corresponding to connected components) are
+    discarded.  If fewer than k non-trivial eigenvectors exist the output
+    is zero-padded to shape [N, k].
+
+    Returns:
+        Tensor of shape [N, k], dtype float32.
+    """
+    from torch_geometric.utils import get_laplacian, to_scipy_sparse_matrix
+    import numpy as np
+
+    lap_ei, lap_ew = get_laplacian(edge_index, num_nodes=num_nodes, normalization="sym")
+    L = to_scipy_sparse_matrix(lap_ei, lap_ew, num_nodes)
+
+    if num_nodes <= 2000:
+        eigenvalues, eigenvectors = np.linalg.eigh(L.toarray().astype(np.float64))
+    else:
+        import scipy.sparse.linalg as sla
+        k_req = min(k + 2, num_nodes - 2)
+        eigenvalues, eigenvectors = sla.eigsh(L.astype(np.float64), k=k_req, which="SM")
+        order = np.argsort(eigenvalues)
+        eigenvalues = eigenvalues[order]
+        eigenvectors = eigenvectors[:, order]
+
+    # Drop near-zero eigenvalues (trivial, one per connected component)
+    nontrivial = eigenvalues > 1e-5
+    eigenvectors = eigenvectors[:, nontrivial][:, :k]
+
+    if eigenvectors.shape[1] < k:
+        pad = np.zeros((num_nodes, k - eigenvectors.shape[1]))
+        eigenvectors = np.concatenate([eigenvectors, pad], axis=1)
+
+    return torch.from_numpy(eigenvectors.astype(np.float32))  # [N, k]
+
+
+def get_graph_template(new_graph: nx.Graph, rwpe_steps: int = 0, lapev_k: int = 0) -> Data:
     graph_template = pgu.from_networkx(new_graph)
     del graph_template.pos
     del graph_template.edge_type
 
     if rwpe_steps > 0:
         graph_template.pe = compute_rwpe(graph_template.edge_index, graph_template.num_nodes, rwpe_steps)
+
+    if lapev_k > 0:
+        graph_template.eig = compute_lapev(graph_template.edge_index, graph_template.num_nodes, lapev_k)
 
     return graph_template
 
@@ -49,6 +92,7 @@ class WDNDataset(Dataset):
         std=None,
         norm_type="znorm",
         rwpe_steps=0,
+        lapev_k=0,
         **kwargs,
     ):
         """The dataset class supports multiple datasets
@@ -62,6 +106,7 @@ class WDNDataset(Dataset):
         :param std: existing computed std, set None to re-compute, defaults to None
         :param norm_type: normalization type supports: znorm/minmax/unused, default is znorm
         :param int rwpe_steps: number of Random Walk PE steps. 0 = disabled, defaults to 0
+        :param int lapev_k: number of Laplacian eigenvectors for SignNet PE. 0 = disabled, defaults to 0
         :raises KeyError: Key is not found in attrs of the zarr file
         """
         assert norm_type == "znorm" 
@@ -80,7 +125,7 @@ class WDNDataset(Dataset):
         for i, (input_path, zip_file_path) in enumerate(zip(input_paths, zip_file_paths)):
             assert os.path.isfile(input_path) and (input_path[-4:] == ".inp" or input_path[-4:] == ".net"), f"{input_path} is not a INP/ NET file"
 
-            graph_template, array, keep_list = self.collect(input_path, zip_file_path, feature, from_set, rwpe_steps=rwpe_steps, **kwargs)  #For each network it calls self.collect() (explained below) which returns three things: a graph template (the fixed topology), a numpy array of simulation results, and a keep list (which nodes to retain). All three are stored in parallel lists (_templates, _arrays, _keeplists).
+            graph_template, array, keep_list = self.collect(input_path, zip_file_path, feature, from_set, rwpe_steps=rwpe_steps, lapev_k=lapev_k, **kwargs)  #For each network it calls self.collect() (explained below) which returns three things: a graph template (the fixed topology), a numpy array of simulation results, and a keep list (which nodes to retain). All three are stored in parallel lists (_templates, _arrays, _keeplists).
 
             self._templates.append(graph_template)
             self._lengths.append(array.shape[0])
@@ -130,12 +175,13 @@ class WDNDataset(Dataset):
         return self._arrays[idx]
 
     def collect(
-        self, 
-        input_path: str, 
-        zip_file_path: str, 
-        feature: str, 
+        self,
+        input_path: str,
+        zip_file_path: str,
+        feature: str,
         from_set: str,
-        rwpe_steps: int = 0, 
+        rwpe_steps: int = 0,
+        lapev_k: int = 0,
         **kwargs
     ) -> tuple[Data, np.ndarray, list[str]]:
 
@@ -169,7 +215,7 @@ class WDNDataset(Dataset):
 
         new_graph = graph.subgraph(keep_list).copy() if keep_list is not None else graph
 
-        graph_template = get_graph_template(new_graph=new_graph, rwpe_steps=rwpe_steps)
+        graph_template = get_graph_template(new_graph=new_graph, rwpe_steps=rwpe_steps, lapev_k=lapev_k)
 
         return graph_template, array, keep_list 
 
@@ -182,6 +228,7 @@ def get_stacked_set2(
     train_std: Any,
     feature: str = "pressure",
     rwpe_steps: int = 0,
+    lapev_k: int = 0,
 ):
     current_records = 0
     test_train_ds = WDNDataset(
@@ -192,6 +239,7 @@ def get_stacked_set2(
         mean=train_mean,
         std=train_std,
         rwpe_steps=rwpe_steps,
+        lapev_k=lapev_k,
     )
     current_records += len(test_train_ds)
     ret_test_ds = test_train_ds

@@ -37,6 +37,7 @@ _DEVICE            = "cuda"
 _SAVE_PATH     = "/content/drive/MyDrive/WDN/checkpoints/ctown_gatres"
 _MODEL_PATH    = "/content/drive/MyDrive/WDN/checkpoints/ctown_gatres10k_12/best_GATResMeanConv_small_znorm_15b_32c_20260510_1654.pth"
 _RWPE_STEPS         = 0
+_LAPEV_K            = 0
 _DO_LOAD            = False
 _FEATURE             = "pressure"
 _RANDOM_SEED = 42
@@ -49,7 +50,7 @@ def get_arguments(raw_args):
         "--model",
         default=_MODEL,
         type=str,
-        choices=["gatres_small", "gatres_small_rwpe", "gatres_large"],
+        choices=["gatres_small", "gatres_small_rwpe", "gatres_large", "gatres_small_signnet"],
         help="support model selection only.",
     )
     parser.add_argument("--lr", default=_LR, type=float, help="Learning rate")
@@ -88,6 +89,7 @@ def get_arguments(raw_args):
     parser.add_argument("--save_path", default=_SAVE_PATH, type=str, help="Path to store model weights")
     parser.add_argument("--model_path", default=_MODEL_PATH, type=str, help="Model path")
     parser.add_argument("--rwpe_steps", default=_RWPE_STEPS, type=int, help="Number of Random Walk PE steps appended to node features. 0 = disabled.")
+    parser.add_argument("--lapev_k", default=_LAPEV_K, type=int, help="Number of Laplacian eigenvectors for SignNet PE. 0 = disabled.")
     parser.add_argument("--do_load", default=_DO_LOAD, action="store_true", help="Whether to load model weights from model_path")
     parser.add_argument("--feature", default=_FEATURE, choices=["pressure", "head"], type=str, help="feature input")
     parser.add_argument("--seed", default=_RANDOM_SEED, type=int, help="Random seed for reproducibility")
@@ -105,7 +107,8 @@ def get_arguments(raw_args):
 
 def get_default_datasets(args):
     rwpe_steps = getattr(args, "rwpe_steps", 0)
- 
+    lapev_k    = getattr(args, "lapev_k", 0)
+
     train_ds = WDNDataset(
         zip_file_paths=args.dataset_paths,
         input_paths=args.input_paths,
@@ -114,8 +117,9 @@ def get_default_datasets(args):
         mean=None, std=None,
         norm_type="znorm",
         rwpe_steps=rwpe_steps,
+        lapev_k=lapev_k,
     )
- 
+
     val_ds = WDNDataset(
         zip_file_paths=args.dataset_paths,
         input_paths=args.input_paths,
@@ -124,9 +128,9 @@ def get_default_datasets(args):
         mean=train_ds.mean, std=train_ds.std,
         norm_type="znorm",
         rwpe_steps=rwpe_steps,
+        lapev_k=lapev_k,
     )
- 
- 
+
     return train_ds, val_ds
  
  
@@ -157,7 +161,8 @@ def train_one_epoch(
         batch_mask = generate_batch_mask(num_nodes=num_nodes, mask_rate=mask_rate, required_idx=[])
         data.x[batch_mask] = 0
         x_input = torch.cat([data.x, data.pe.to(device)], dim=-1) if hasattr(data, "pe") else data.x
-        out     = model(x_input, data.edge_index)
+        eig     = data.eig.to(device) if hasattr(data, "eig") else None
+        out     = model(x_input, data.edge_index, eig)
  
         y_pred = out[batch_mask]
         y_true = data.y[batch_mask]
@@ -206,7 +211,8 @@ def test_one_epoch(
             batch_mask = generate_batch_mask(num_nodes=num_nodes, mask_rate=mask_rate, required_idx=[])
             data.x[batch_mask] = 0
             x_input = torch.cat([data.x, data.pe.to(device)], dim=-1) if hasattr(data, "pe") else data.x
-            out     = model(x_input, data.edge_index)
+            eig     = data.eig.to(device) if hasattr(data, "eig") else None
+            out     = model(x_input, data.edge_index, eig)
  
             y_pred = out[batch_mask]
             y_true = data.y[batch_mask]

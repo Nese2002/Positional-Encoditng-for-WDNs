@@ -30,7 +30,91 @@ class GATResMeanConv(torch.nn.Module):
         )
         self.lin1 = Linear(nc, 1)
 
-    def forward(self, x, edge_index):
+    def forward(self, x, edge_index, eig=None):  # eig unused; accepted for uniform call signature
+        x = self.lin0(x)
+        for block in self.blocks:
+            x = block(x, edge_index)
+        return self.lin1(x)
+
+
+# ---------------------------------------------------------------------------
+# SignNet positional encoding (Lim et al., 2022)
+# ---------------------------------------------------------------------------
+
+class SignNetPE(torch.nn.Module):
+    """Sign-invariant positional encoding.
+
+    For each node u and each of the k Laplacian eigenvectors v_i, computes
+        phi(v_i[u]) + phi(-v_i[u])
+    which is invariant to the sign of v_i.  The k terms are summed and
+    projected by rho to produce a pe_dim-dimensional embedding per node.
+
+    Args:
+        k: number of Laplacian eigenvectors stored in data.eig.
+        phi_hidden: hidden width of the per-eigenvector MLP phi.
+        pe_dim: output dimension (concatenated to node features).
+    """
+
+    def __init__(self, k: int, phi_hidden: int = 64, pe_dim: int = 16):
+        super().__init__()
+        self.phi = torch.nn.Sequential(
+            Linear(1, phi_hidden),
+            torch.nn.ReLU(),
+            Linear(phi_hidden, phi_hidden),
+        )
+        self.rho = torch.nn.Sequential(
+            Linear(phi_hidden, pe_dim),
+            torch.nn.ReLU(),
+        )
+
+    def forward(self, eig: torch.Tensor) -> torch.Tensor:
+        # eig: [N, k]
+        h = eig.unsqueeze(-1)            # [N, k, 1]
+        h = self.phi(h) + self.phi(-h)   # [N, k, phi_hidden]  — sign-invariant
+        h = h.sum(dim=1)                 # [N, phi_hidden]      — aggregate over k
+        return self.rho(h)               # [N, pe_dim]
+
+
+class GATResMeanConvSignNet(torch.nn.Module):
+    """GATRes-small with SignNet positional encoding.
+
+    Eigenvectors are precomputed once at dataset construction and stored in
+    data.eig [N, k].  At forward time SignNetPE maps them to a pe_dim
+    embedding that is concatenated to the masked pressure feature before
+    the steaming linear layer.
+
+    Args:
+        name: model name used for checkpointing.
+        num_blocks: number of GATRes blocks (same as GATRes-small = 15).
+        nc: hidden channel width (same as GATRes-small = 32).
+        k: number of Laplacian eigenvectors (must match lapev_k in DataLoader).
+        phi_hidden: hidden width inside SignNetPE.phi.
+        pe_dim: output dimension of SignNetPE; expands input to lin0 by pe_dim.
+    """
+
+    def __init__(
+        self,
+        name: str = "GATResMeanConvSignNet",
+        num_blocks: int = 15,
+        nc: int = 32,
+        k: int = 16,
+        phi_hidden: int = 64,
+        pe_dim: int = 16,
+    ):
+        super().__init__()
+        self.name = name
+        self.num_blocks = num_blocks
+        self.sign_net = SignNetPE(k=k, phi_hidden=phi_hidden, pe_dim=pe_dim)
+        self.lin0 = Linear(1 + pe_dim, nc)
+        self.blocks = torch.nn.ModuleList(
+            GResBlockMeanConv(nc, nc, nc) for _ in range(num_blocks)
+        )
+        self.lin1 = Linear(nc, 1)
+
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor, eig: torch.Tensor = None) -> torch.Tensor:
+        assert eig is not None, "GATResMeanConvSignNet requires eigenvectors passed as eig (data.eig)"
+        pe = self.sign_net(eig)              # [N, pe_dim]
+        x = torch.cat([x, pe], dim=-1)      # [N, 1 + pe_dim]
         x = self.lin0(x)
         for block in self.blocks:
             x = block(x, edge_index)

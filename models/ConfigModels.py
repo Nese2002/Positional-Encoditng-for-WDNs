@@ -1,6 +1,6 @@
 import argparse
 import torch
-from models.GATRes import GATResMeanConv
+from models.GATRes import GATResMeanConv, GATResMeanConvSignNet
 
 
 # def _apply_common_args(args: argparse.Namespace) -> argparse.Namespace:
@@ -33,17 +33,31 @@ def config_gatres_small_rwpe(args: argparse.Namespace) -> tuple[argparse.Namespa
     args.rwpe_steps = k
     return args, GATResMeanConv(
         f"GATRes_small_rwpe{k}",
-        num_blocks=15, 
-        nc=32, 
+        num_blocks=15,
+        nc=32,
         in_dim=1 + k,
+    )
+
+
+def config_gatres_small_signnet(args: argparse.Namespace) -> tuple[argparse.Namespace, torch.nn.Module]:
+    k = getattr(args, "lapev_k", 16)   # --lapev_k controls how many eigenvectors to use
+    args.lapev_k = k
+    return args, GATResMeanConvSignNet(
+        name=f"GATRes_small_signnet_k{k}",
+        num_blocks=15,
+        nc=32,
+        k=k,
+        phi_hidden=64,
+        pe_dim=16,
     )
 
 
 # Registry: uniform (args, name) -> (args, model) signature for every entry
 MODEL_REGISTRY: dict[str, callable] = {
-    "gatres_small":      config_gatres_small,
-    "gatres_large":      config_gatres_large,
-    "gatres_small_rwpe": config_gatres_small_rwpe,
+    "gatres_small":           config_gatres_small,
+    "gatres_large":           config_gatres_large,
+    "gatres_small_rwpe":      config_gatres_small_rwpe,
+    "gatres_small_signnet":   config_gatres_small_signnet,
 }
 
 CHOICES = list(MODEL_REGISTRY.keys())
