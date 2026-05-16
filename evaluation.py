@@ -40,7 +40,7 @@ def get_arguments(raw_args):
         "--model",
         default=_MODEL,
         type=str,
-        choices=["gatres_small", "gatres_small_rwpe", "gatres_large"],
+        choices=["gatres_small", "gatres_small_rwpe", "gatres_large", "gatres_small_signnet"],
         help="support model selection only.",
     )
     parser.add_argument("--model_path", default=_MODEL_PATH, type=str, help="Model path")
@@ -69,6 +69,7 @@ def get_arguments(raw_args):
     parser.add_argument("--model_name", default=_MODEL_NAME, type=str, help="Name of model. Keep its empty to use the name of class by default")
     parser.add_argument("--batch_size", default=_BATCH_SIZE, type=int, help="batch size")
     parser.add_argument("--rwpe_steps", default=_RWPE_STEPS, type=int, help="Number of Random Walk PE steps appended to node features. 0 = disabled.")
+    parser.add_argument("--lapev_k", default=0, type=int, help="Number of Laplacian eigenvectors for SignNet PE. 0 = disabled.")
     parser.add_argument(
         "--device",
         default=_DEVICE,
@@ -92,7 +93,8 @@ def get_arguments(raw_args):
 
 def get_default_datasets(args: argparse.Namespace, mean_dmd=0.1, std_dmd=1.0) -> tuple[WDNDataset, WDNDataset]:
     rwpe_steps = getattr(args, "rwpe_steps", 0)
-    
+    lapev_k    = getattr(args, "lapev_k", 0)
+
     train_ds = WDNDataset(
         zip_file_paths=args.dataset_paths,
         input_paths=args.input_paths,
@@ -102,8 +104,9 @@ def get_default_datasets(args: argparse.Namespace, mean_dmd=0.1, std_dmd=1.0) ->
         std=None,
         norm_type="znorm",
         rwpe_steps=rwpe_steps,
+        lapev_k=lapev_k,
     )
-    
+
     test_ds = get_stacked_set2(
         zip_file_path=args.test_data_path,  # fullnode
         input_path=args.test_input_path,
@@ -111,6 +114,7 @@ def get_default_datasets(args: argparse.Namespace, mean_dmd=0.1, std_dmd=1.0) ->
         train_mean=train_ds.mean,
         train_std=train_ds.std,
         rwpe_steps=rwpe_steps,
+        lapev_k=lapev_k,
     )
     return train_ds, test_ds
 
@@ -149,7 +153,8 @@ def test_one_epoch(
             data_x1[all_mask] = 0
 
             x_input = torch.cat([data_x1, data.pe.to(device)], dim=-1) if hasattr(data, "pe") else data_x1
-            out = model(x_input, data.edge_index)
+            eig     = data.eig.to(device) if hasattr(data, "eig") else None
+            out     = model(x_input, data.edge_index, eig)
 
             y_pred = out[all_mask]  # y_pred.masked_select(mask)
             y_true = data.y[all_mask]  # y_true.masked_select(mask)
