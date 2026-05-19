@@ -229,13 +229,14 @@ def get_stacked_set2(
     feature: str = "pressure",
     rwpe_steps: int = 0,
     lapev_k: int = 0,
+    from_set: str = "test",
 ):
     current_records = 0
     test_train_ds = WDNDataset(
         zip_file_paths=[zip_file_path],
         input_paths=[input_path],
         feature=feature,
-        from_set="train",
+        from_set=from_set,
         mean=train_mean,
         std=train_std,
         rwpe_steps=rwpe_steps,
@@ -244,37 +245,5 @@ def get_stacked_set2(
     current_records += len(test_train_ds)
     ret_test_ds = test_train_ds
 
-    # if num_tests is not None and current_records < num_tests:
-    #     residual = num_tests - current_records
-    #     test_valid_ds = WDNDataset(
-    #         zip_file_paths=[zip_file_path],
-    #         input_paths=[input_path],
-    #         feature=feature,
-    #         from_set="valid",
-    #         num_records=residual,
-    #         mean=train_mean,
-    #         std=train_std,
-    #         rwpe_steps=rwpe_steps,
-    #     )
-    #     current_records += len(test_valid_ds)
-    #     ret_test_ds = ret_test_ds + test_valid_ds
-
-    # if num_tests is not None and current_records < num_tests:
-    #     residual = num_tests - current_records
-    #     test_ds = WDNDataset(
-    #         zip_file_paths=[zip_file_path],
-    #         input_paths=[input_path],
-    #         feature=feature,
-    #         from_set="test",
-    #         num_records=residual,
-    #         mean=train_mean,
-    #         std=train_std,
-    #         rwpe_steps=rwpe_steps,
-    #     )
-    #     current_records += len(test_valid_ds)
-    #     ret_test_ds = ret_test_ds + test_ds
-
-    # if num_tests is not None:
-    #     print(f"Test set length: actual: {current_records} / Expected : {num_tests}")
-
+    
     return ret_test_ds

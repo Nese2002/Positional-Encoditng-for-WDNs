@@ -115,6 +115,7 @@ def get_default_datasets(args: argparse.Namespace, mean_dmd=0.1, std_dmd=1.0) ->
         train_std=train_ds.std,
         rwpe_steps=rwpe_steps,
         lapev_k=lapev_k,
+        from_set="test",
     )
     return train_ds, test_ds
 
