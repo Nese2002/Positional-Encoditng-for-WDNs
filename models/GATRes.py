@@ -37,23 +37,9 @@ class GATResMeanConv(torch.nn.Module):
         return self.lin1(x)
 
 
-# ---------------------------------------------------------------------------
-# SignNet positional encoding (Lim et al., 2022)
-# ---------------------------------------------------------------------------
 
 class SignNetPE(torch.nn.Module):
-    """Sign-invariant positional encoding.
 
-    For each node u and each of the k Laplacian eigenvectors v_i, computes
-        phi(v_i[u]) + phi(-v_i[u])
-    which is invariant to the sign of v_i.  The k terms are summed and
-    projected by rho to produce a pe_dim-dimensional embedding per node.
-
-    Args:
-        k: number of Laplacian eigenvectors stored in data.eig.
-        phi_hidden: hidden width of the per-eigenvector MLP phi.
-        pe_dim: output dimension (concatenated to node features).
-    """
 
     def __init__(self, k: int, phi_hidden: int = 64, pe_dim: int = 16):
         super().__init__()
@@ -76,22 +62,6 @@ class SignNetPE(torch.nn.Module):
 
 
 class GATResMeanConvSignNet(torch.nn.Module):
-    """GATRes-small with SignNet positional encoding.
-
-    Eigenvectors are precomputed once at dataset construction and stored in
-    data.eig [N, k].  At forward time SignNetPE maps them to a pe_dim
-    embedding that is concatenated to the masked pressure feature before
-    the steaming linear layer.
-
-    Args:
-        name: model name used for checkpointing.
-        num_blocks: number of GATRes blocks (same as GATRes-small = 15).
-        nc: hidden channel width (same as GATRes-small = 32).
-        k: number of Laplacian eigenvectors (must match lapev_k in DataLoader).
-        phi_hidden: hidden width inside SignNetPE.phi.
-        pe_dim: output dimension of SignNetPE; expands input to lin0 by pe_dim.
-    """
-
     def __init__(
         self,
         name: str = "GATResMeanConvSignNet",

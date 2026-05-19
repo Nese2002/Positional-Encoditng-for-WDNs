@@ -10,12 +10,11 @@ import networkx as nx
 import numpy as np
 from copy import deepcopy
 import torch
-
+from torch_geometric.utils import get_laplacian, to_scipy_sparse_matrix, degree
 from typing import Any, Optional
 
 
 def compute_rwpe(edge_index: torch.Tensor, num_nodes: int, k: int) -> torch.Tensor:
-    from torch_geometric.utils import degree
     row, col = edge_index
     deg = degree(row, num_nodes=num_nodes).clamp(min=1)
     A = torch.zeros(num_nodes, num_nodes)
@@ -29,21 +28,6 @@ def compute_rwpe(edge_index: torch.Tensor, num_nodes: int, k: int) -> torch.Tens
 
 
 def compute_lapev(edge_index: torch.Tensor, num_nodes: int, k: int) -> torch.Tensor:
-    """Compute the k smallest non-trivial eigenvectors of the symmetric
-    normalised Laplacian L_sym = I - D^{-1/2} A D^{-1/2}.
-
-    Uses dense eigendecomposition for graphs with <= 2000 nodes and the
-    sparse Lanczos solver (eigsh) for larger ones.  Trivial eigenvectors
-    (eigenvalue < 1e-5, corresponding to connected components) are
-    discarded.  If fewer than k non-trivial eigenvectors exist the output
-    is zero-padded to shape [N, k].
-
-    Returns:
-        Tensor of shape [N, k], dtype float32.
-    """
-    from torch_geometric.utils import get_laplacian, to_scipy_sparse_matrix
-    import numpy as np
-
     lap_ei, lap_ew = get_laplacian(edge_index, num_nodes=num_nodes, normalization="sym")
     L = to_scipy_sparse_matrix(lap_ei, lap_ew, num_nodes)
 
