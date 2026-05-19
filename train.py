@@ -50,7 +50,7 @@ def get_arguments(raw_args):
         "--model",
         default=_MODEL,
         type=str,
-        choices=["gatres_small", "gatres_small_rwpe", "gatres_large", "gatres_small_signnet"],
+        choices=["gatres_small", "gatres_small_rwpe", "gatres_small_signnet"],
         help="support model selection only.",
     )
     parser.add_argument("--lr", default=_LR, type=float, help="Learning rate")
